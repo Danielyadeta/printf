@@ -1,74 +1,90 @@
 #include "main.h"
 
-/**
- * _printf - custom function that format and print data
- * @format:  list of types of arguments passed to the function
- * Return: int
- */
+void cleanup(va_list args, buffer_t *output);
+int run_printf(const char *format, va_list args, buffer_t *output);
+int _printf(const char *format, ...);
 
+/**
+ * cleanup - Peforms cleanup operations for _printf.
+ * @args: A va_list of arguments provided to _printf.
+ * @output: A buffer_t struct.
+ */
+void cleanup(va_list args, buffer_t *output)
+{
+	va_end(args);
+	write(1, output->start, output->len);
+	free_buffer(output);
+}
+
+/**
+ * run_printf - Reads through the format string for _printf.
+ * @format: Character string to print - may contain directives.
+ * @output: A buffer_t struct containing a buffer.
+ * @args: A va_list of arguments.
+ *
+ * Return: The number of characters stored to output.
+ */
+int run_printf(const char *format, va_list args, buffer_t *output)
+{
+	int i, wid, prec, ret = 0;
+	char tmp;
+	unsigned char flags, len;
+	unsigned int (*f)(va_list, buffer_t *,
+			unsigned char, int, int, unsigned char);
+
+	for (i = 0; *(format + i); i++)
+	{
+		len = 0;
+		if (*(format + i) == '%')
+		{
+			tmp = 0;
+			flags = handle_flags(format + i + 1, &tmp);
+			wid = handle_width(args, format + i + tmp + 1, &tmp);
+			prec = handle_precision(args, format + i + tmp + 1,
+					&tmp);
+			len = handle_length(format + i + tmp + 1, &tmp);
+
+			f = handle_specifiers(format + i + tmp + 1);
+			if (f != NULL)
+			{
+				i += tmp + 1;
+				ret += f(args, output, flags, wid, prec, len);
+				continue;
+			}
+			else if (*(format + i + tmp + 1) == '\0')
+			{
+				ret = -1;
+				break;
+			}
+		}
+		ret += _memcpy(output, (format + i), 1);
+		i += (len != 0) ? 1 : 0;
+	}
+	cleanup(args, output);
+	return (ret);
+}
+
+/**
+ * _printf - Outputs a formatted string.
+ * @format: Character string to print - may contain directives.
+ *
+ * Return: The number of characters printed.
+ */
 int _printf(const char *format, ...)
 {
-	va_list list;
-	int idx, j;
-	int len_buf = 0;
-	char *s;
-	char *create_buff;
+	buffer_t *output;
+	va_list args;
+	int ret;
 
-	type_t ops[] = {
-		{"c", print_c},
-		{"s", print_s},
-		{"i", print_i},
-		{"d", print_i},
-		{"b", print_bin},
-		{NULL, NULL}
-	};
+	if (format == NULL)
+		return (-1);
+	output = init_buffer();
+	if (output == NULL)
+		return (-1);
 
-	create_buff = malloc(1024 * sizeof(char));
-	if (create_buff == NULL)
-	{
-		free(create_buff);
-		return (-1);
-	}
-	va_start(list, format);
-	if (format == NULL || list == NULL)
-		return (-1);
-	for (idx = 0; format[idx] != '\0'; idx++)
-	{
-		if (format[idx] == '%' && format[idx + 1] == '%')
-			continue;
-		else if (format[idx] == '%')
-		{
-			if (format[idx + 1] == ' ')
-				idx += _position(format, idx);
-			for (j = 0; ops[j].f != NULL; j++)
-			{
-				if (format[idx + 1] == *(ops[j].op))
-				{
-					s = ops[j].f(list);
-					if (s == NULL)
-						return (-1);
-					_strlen(s);
-					_strcat(create_buff, s, len_buf);
-					len_buf += _strlen(s);
-					idx++;
-					break;
-				}
-			}
-			if (ops[j].f == NULL)
-			{
-				create_buff[len_buf] = format[idx];
-				len_buf++;
-			}
-		}
-		else
-		{
-			create_buff[len_buf] = format[idx];
-			len_buf++;
-		}
-	}
-	create_buff[len_buf] = '\0';
-	write(1, create_buff, len_buf);
-	va_end(list);
-	free(create_buff);
-	return (len_buf);
+	va_start(args, format);
+
+	ret = run_printf(format, args, output);
+
+	return (ret);
 }
